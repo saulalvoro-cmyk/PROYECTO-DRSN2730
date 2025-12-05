@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Generador ISAI - Control Total</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-app: #f8f9fb;
+      --bg-sidebar: #ffffff;
+      --primary: #2563eb;
+      --success: #10b981;
+      --danger: #ef4444;
+      --text-main: #1f2937;
+      --border-light: #e5e7eb;
+      --shadow-up: 0 -4px 10px rgba(0, 0, 0, 0.05);
+    }
+
+    body { 
+        background: var(--bg-app); 
+        font-family: 'Inter', sans-serif; 
+        color: var(--text-main);
+        height: 100vh; 
+        overflow: hidden; 
+    }
+
+    /* --- SIDEBAR FLEXIBLE (Layout Fijo) --- */
+    .sidebar { 
+        background: var(--bg-sidebar); 
+        border-right: 1px solid var(--border-light); 
+        height: 100vh; 
+        padding: 0; 
+        display: flex;
+        flex-direction: column; 
+        z-index: 20;
+    }
+
+    /* 1. HEADER */
+    .sidebar-header {
+        padding: 20px 20px 10px 20px;
+        flex-shrink: 0; 
+        background: #fff;
+        z-index: 20;
+    }
+
+    /* 2. LISTA SCROLLABLE (Ocupa el espacio sobrante) */
+    #fieldsList {
+        flex-grow: 1; 
+        overflow-y: auto; 
+        padding: 0 20px 20px 20px;
+        background: #fff;
+    }
+    
+    /* 3. FOOTER (Botones fijos abajo) */
+    .sidebar-footer {
+        padding: 15px 20px;
+        background: #fff;
+        border-top: 1px solid var(--border-light);
+        box-shadow: var(--shadow-up);
+        flex-shrink: 0; 
+        z-index: 30;
+    }
+
+    /* Scrollbars finos */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    
+    /* Área del PDF */
+    .viewer-area {
+        background: #f1f5f9;
+        height: 100vh;
+        overflow: auto;
+        display: flex;
+        justify-content: center;
+        padding: 40px;
+        position: relative;
+    }
+
+    /* Acordeón para Archivos */
+    details.custom-details {
+        border: 1px solid var(--border-light);
+        border-radius: 8px;
+        overflow: hidden;
+        margin-bottom: 1rem;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        background: #fff;
+    }
+    details.custom-details summary {
+        padding: 10px 15px;
+        background: #f9fafb;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #555;
+        list-style: none; 
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    details.custom-details summary::after { content: '+'; font-size: 1.2em; font-weight: normal; }
+    details.custom-details[open] summary::after { content: '-'; }
+    details.custom-details[open] summary { border-bottom: 1px solid var(--border-light); }
+    .details-content { padding: 15px; background: #fff; }
+
+    /* Items de Mapeo */
+    .mapping-item {
+        background: #fff;
+        border: 1px solid #f3f4f6;
+        border-left: 3px solid #e5e7eb;
+        padding: 12px;
+        margin-bottom: 8px;
+        border-radius: 6px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+        transition: transform 0.1s;
+    }
+    .mapping-item:hover { background: #f9fafb; border-color: #e5e7eb; }
+    .mapping-item.detected { border-left-color: var(--primary); }
+    .mapping-item.manual { border-left-color: var(--danger); }
+    .mapping-item.ok { border-left-color: var(--success); background: #f0fdf4; border: 1px solid #dcfce7; }
+
+    /* MARCADORES EN EL PDF (Visualización Mejorada) */
+    .field-marker {
+        position: absolute;
+        border: 1px solid var(--primary);
+        background: rgba(255, 255, 255, 0.7);
+        color: var(--primary);
+        font-size: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 4px;
+        cursor: pointer;
+        font-weight: 600;
+        z-index: 5;
+        border-radius: 3px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        transition: all 0.2s ease;
+    }
+    .field-marker:hover { z-index: 100; transform: scale(1.05); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+    
+    .field-marker.manual { border-color: var(--danger); color: var(--danger); }
+    
+    /* Cuando está mapeado (OK) */
+    .field-marker.mapped { 
+        background: #10b981; 
+        border-color: #059669; 
+        color: white; 
+        opacity: 0.9;
+        z-index: 10;
+    }
+    .field-marker.mapped:hover { opacity: 1; }
+
+    /* Inputs y UI general */
+    h4 { font-weight: 600; font-size: 1.1rem; margin: 0; }
+    .form-control, .form-select { font-size: 0.85rem; }
+    .btn { font-size: 0.85rem; font-weight: 500; }
+    
+    #loadingOverlay {
+        position: fixed; inset: 0; background: rgba(255,255,255,0.85); backdrop-filter: blur(4px);
+        z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .pdf-wrapper { box-shadow: 0 10px 30px rgba(0,0,0,0.15); border-radius: 4px; position: relative; }
+  </style>
+</head>
+<body>
+
+<div id="loadingOverlay">
+    <div class="spinner-border text-primary mb-2" role="status"></div>
+    <div class="fw-bold text-dark">Procesando...</div>
+    <div id="loadingSubtitle" class="small text-muted"></div>
+</div>
+
+<div class="container-fluid g-0">
+  <div class="row g-0">
+    
+    <div class="col-md-4 sidebar">
+        
+        <div class="sidebar-header">
+            <h4 class="mb-3 text-dark">Herramienta PDF</h4>
+            
+            <details class="custom-details" open>
+                <summary>ARCHIVOS DE ORIGEN</summary>
+                <div class="details-content">
+                    <input class="form-control form-control-sm mb-2" id="pdfFile" type="file" accept="application/pdf">
+                    <input class="form-control form-control-sm" id="excelFile" type="file" accept=".xlsx,.xls,.csv">
+                    <div id="fileStatus" class="mt-2 small fw-bold text-success text-end"></div>
+                </div>
+            </details>
+
+            <div class="d-flex justify-content-between align-items-center mt-3">
+                <span class="small text-muted fw-bold">LISTA DE CAMPOS</span>
+                <div class="btn-group shadow-sm">
+                     <button class="btn btn-sm btn-outline-secondary" id="btnDetect" title="Volver a escanear el PDF">↻</button>
+                     <button class="btn btn-sm btn-outline-danger" id="btnAddManual" title="Crear campo manual">+ Texto</button>
+                     <button class="btn btn-sm btn-primary px-3" id="btnAutoMap" title="Asociar por nombre">⚡ Auto</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="fieldsList">
+            <div class="d-flex flex-column align-items-center justify-content-center h-50 text-muted opacity-50 mt-5">
+                <div style="font-size: 2rem;">📂</div>
+                <small class="mt-2 text-center">Carga PDF y Excel<br>para ver los campos.</small>
+            </div>
+        </div>
+
+        <div class="sidebar-footer">
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="chkCommas" checked>
+                <label class="form-check-label small text-secondary" for="chkCommas">Aplicar formato de miles (1,000.00)</label>
+            </div>
+            <div class="d-grid gap-2 d-md-flex">
+                <button id="btnPreview" class="btn btn-dark flex-grow-1" disabled>👁️ Vista Previa</button>
+                <button id="btnDownload" class="btn btn-success fw-bold flex-grow-1" disabled>📦 Descargar ZIP</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8 viewer-area">
+        <div class="pdf-wrapper" id="pdfWrapper">
+            <canvas id="pdfCanvas"></canvas>
+            <div id="markersLayer" style="position:absolute; top:0; left:0;"></div>
+        </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.0/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+
+<script>
+    /* CONFIGURACIÓN */
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    
+    let state = {
+        pdfBytes: null, excelData: [], excelHeaders: [],
+        fields: [], scale: 1.5, pageHeight: 0,
+        lastClick: {x: 100, y: 100}
+    };
+
+    const els = {
+        pdfFile: document.getElementById('pdfFile'), excelFile: document.getElementById('excelFile'),
+        fieldsList: document.getElementById('fieldsList'), canvas: document.getElementById('pdfCanvas'),
+        ctx: document.getElementById('pdfCanvas').getContext('2d'), markersLayer: document.getElementById('markersLayer'),
+        overlay: document.getElementById('loadingOverlay'), status: document.getElementById('fileStatus'),
+        btnAutoMap: document.getElementById('btnAutoMap'), btnPreview: document.getElementById('btnPreview'),
+        btnDownload: document.getElementById('btnDownload'), btnDetect: document.getElementById('btnDetect'),
+        btnAddManual: document.getElementById('btnAddManual')
+    };
+    
+    els.btnDetect.addEventListener('click', async () => {
+        if (!state.pdfBytes) return alert("Carga un PDF.");
+        await detectFormFields();
+    });
+
+    /* 1. CARGA */
+    els.pdfFile.addEventListener('change', async (e) => {
+        const f = e.target.files[0]; if(!f) return;
+        toggleLoading(true, "Analizando PDF...");
+        try {
+            state.pdfBytes = await f.arrayBuffer();
+            const loadingTask = pdfjsLib.getDocument(state.pdfBytes);
+            const pdf = await loadingTask.promise;
+            const page = await pdf.getPage(1);
+            const viewport = page.getViewport({ scale: state.scale });
+            state.pageHeight = viewport.height; 
+            els.canvas.width = viewport.width; els.canvas.height = viewport.height;
+            els.markersLayer.style.width = viewport.width + 'px'; els.markersLayer.style.height = viewport.height + 'px';
+            await page.render({ canvasContext: els.ctx, viewport }).promise;
+            await detectFormFields();
+            updateStatus();
+        } catch(err) { alert("Error PDF: " + err.message); }
+        toggleLoading(false);
+    });
+
+    els.excelFile.addEventListener('change', async (e) => {
+        const f = e.target.files[0]; if(!f) return;
+        toggleLoading(true, "Leyendo Excel...");
+        try {
+            const data = await f.arrayBuffer();
+            const wb = XLSX.read(data, {type:'array'});
+            state.excelData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''});
+            if(state.excelData.length) {
+                state.excelHeaders = Object.keys(state.excelData[0]);
+                // Colapsar acordeón para dar espacio
+                document.querySelector('details.custom-details').removeAttribute('open');
+            }
+            updateStatus(); renderFieldsUI();
+        } catch(err) { alert("Error Excel"); }
+        toggleLoading(false);
+    });
+
+    /* 2. CAMPOS Y DETECCIÓN */
+    async function detectFormFields() {
+        if(!state.pdfBytes) return;
+        const pdfDoc = await PDFLib.PDFDocument.load(state.pdfBytes);
+        const rawFields = pdfDoc.getForm().getFields(); 
+        const existingMap = new Map(state.fields.map(f => [f.id, f]));
+        state.fields = []; 
+
+        rawFields.forEach(f => {
+            try {
+                const name = f.getName();
+                const widgets = f.acroField.getWidgets();
+                let rect = { x:0, y:0, w:0, h:0 };
+                if(widgets.length) {
+                    const r = widgets[0].getRectangle(); 
+                    rect = { x: r.x, y: r.y, w: r.width, h: r.height };
+                }
+                const old = existingMap.get(name);
+                state.fields.push({
+                    id: name, type: 'form', label: name, 
+                    col: old ? old.col : '', rect: rect,
+                    disableFormat: old ? old.disableFormat : false,
+                    forceMultiline: old ? old.forceMultiline : false
+                });
+            } catch(e){}
+        });
+        existingMap.forEach(f => { if(f.type === 'manual') state.fields.push(f); });
+        renderFieldsUI(); renderMarkers();
+    }
+
+    function createManualField(x, y) {
+        state.fields.push({
+            id: 'man_'+Date.now(), type: 'manual', label: 'Campo Manual', col: '',
+            rect: { x, y, w: 100, h: 12 }, manualX: x, manualY: y, disableFormat: false
+        });
+        renderFieldsUI(); renderMarkers();
+    }
+
+    els.canvas.addEventListener('mousedown', (e) => {
+        if(!state.pdfBytes) return;
+        const r = els.canvas.getBoundingClientRect();
+        state.lastClick = { x: (e.clientX-r.left)/state.scale, y: (els.canvas.height-(e.clientY-r.top))/state.scale };
+        createManualField(state.lastClick.x, state.lastClick.y);
+    });
+    els.btnAddManual.addEventListener('click', () => createManualField(state.lastClick.x, state.lastClick.y));
+
+    /* 3. RENDER UI */
+    function renderFieldsUI() {
+        els.fieldsList.innerHTML = '';
+        if(!state.fields.length) { els.fieldsList.innerHTML = '<div class="text-center mt-5 text-muted small">Sin campos detectados</div>'; return; }
+
+        state.fields.forEach(f => {
+            const div = document.createElement('div');
+            div.className = `mapping-item ${f.type === 'form' ? 'detected' : 'manual'} ${f.col ? 'ok' : ''}`;
+            
+            let opts = '<option value="">-- Sin Asignar --</option>';
+            state.excelHeaders.forEach(h => opts += `<option value="${h}" ${h===f.col?'selected':''}>${h}</option>`);
+
+            div.innerHTML = `
+                <div class="d-flex justify-content-between mb-1">
+                    <strong class="text-truncate" style="font-size:0.8rem; max-width:85%; color:#333;" title="${f.id}">${f.label}</strong>
+                    ${f.type==='manual' ? `<button class="btn btn-sm py-0 px-1 text-danger" onclick="removeField('${f.id}')">×</button>` : ''}
+                </div>
+                <select class="form-select form-select-sm mb-1 bg-light border-0" onchange="updateMapping('${f.id}', 'col', this.value)">${opts}</select>
+                <div class="d-flex gap-3 mt-1">
+                    <div class="form-check small mb-0">
+                        <input type="checkbox" id="chk_${f.id}" class="form-check-input" ${f.disableFormat?'checked':''} onchange="updateMapping('${f.id}','disableFormat',this.checked)">
+                        <label class="form-check-label text-muted" style="font-size:0.7rem" for="chk_${f.id}">Sin Formato</label>
+                    </div>
+                    ${f.type==='form' ? `<div class="form-check small mb-0"><input type="checkbox" class="form-check-input" ${f.forceMultiline?'checked':''} onchange="updateMapping('${f.id}','forceMultiline',this.checked)"><label class="form-check-label text-muted" style="font-size:0.7rem">Multi-linea</label></div>`:''}
+                </div>
+            `;
+            els.fieldsList.appendChild(div);
+        });
+        checkReady();
+    }
+
+    function renderMarkers() {
+        els.markersLayer.innerHTML = '';
+        state.fields.forEach(f => {
+            let left, top, w, h;
+            if(f.type === 'form') {
+                left = f.rect.x * state.scale;
+                top = els.canvas.height - ((f.rect.y * state.scale) + (f.rect.h * state.scale));
+                w = f.rect.w * state.scale; h = f.rect.h * state.scale;
+            } else {
+                left = f.manualX * state.scale;
+                top = els.canvas.height - (f.manualY * state.scale) - 10;
+                w = 100; h = 20;
+            }
+
+            const el = document.createElement('div');
+            el.className = `field-marker ${f.type} ${f.col ? 'mapped' : ''}`;
+            Object.assign(el.style, { left: left+'px', top: top+'px', width: w+'px', height: h+'px' });
+            
+            // Si tiene columna asignada, mostramos el NOMBRE de la columna
+            // Si no, mostramos vacío (o # para manuales sin asignar) para que no ensucie
+            el.innerText = f.col ? f.col : (f.type==='form' ? '' : '#');
+            el.title = f.col ? `Columna Asignada: ${f.col}` : `Campo PDF: ${f.id}`;
+            
+            els.markersLayer.appendChild(el);
+        });
+    }
+
+    /* 4. LÓGICA CORE (RESTORED ROBUST MATCHING) */
+    window.updateMapping = (id, k, v) => {
+        const f = state.fields.find(x => x.id === id);
+        if(f) { f[k] = (k==='col'?v:Boolean(v)); renderFieldsUI(); renderMarkers(); }
+    };
+    window.removeField = (id) => { state.fields = state.fields.filter(x=>x.id!==id); renderFieldsUI(); renderMarkers(); };
+    
+    // -- AQUÍ ESTÁ LA SOLUCIÓN: Lógica de emparejamiento original restaurada --
+    els.btnAutoMap.addEventListener('click', () => {
+        if(state.excelHeaders.length === 0) return alert("Carga el Excel primero");
+        
+        let matches = 0;
+        state.fields.forEach(f => {
+            // Limpiar nombre del PDF (Quitar espacios y símbolos)
+            const fName = f.label.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            
+            // Buscar coincidencia en encabezados de Excel
+            const bestMatch = state.excelHeaders.find(h => {
+                const hName = h.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                // Comparación doble vía: 
+                // ¿Son iguales? O ¿A incluye a B? O ¿B incluye a A?
+                return fName === hName || fName.includes(hName) || hName.includes(fName);
+            });
+
+            // Si hay coincidencia y el campo estaba vacío, asignarlo
+            if(bestMatch && f.col === '') {
+                f.col = bestMatch;
+                matches++;
+            }
+        });
+        
+        renderFieldsUI();
+        renderMarkers();
+        alert(`Se asociaron automáticamente ${matches} campos.`);
+    });
+
+    /* 5. GENERACIÓN PDF */
+    async function generatePdfBytes(row) {
+        const doc = await PDFLib.PDFDocument.load(state.pdfBytes);
+        const form = doc.getForm();
+        const font = await doc.embedFont(PDFLib.StandardFonts.Helvetica);
+        const page = doc.getPages()[0];
+        const globalCommas = document.getElementById('chkCommas').checked;
+
+        state.fields.forEach(f => {
+            if(!f.col) return;
+            let val = row[f.col]; if(val==null) val=""; val=String(val);
+            
+            // Limpieza
+            val = val.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, ' ').replace(/ {2,}/g, ' ').trim();
+
+            const useCommas = globalCommas && !f.disableFormat;
+            if(useCommas && !isNaN(parseFloat(val)) && isFinite(val)) {
+                try { 
+                   if(f.col.toUpperCase()==='FACTOR') val = parseFloat(val).toFixed(4);
+                   else val = parseFloat(val).toLocaleString('en-US', {maximumFractionDigits:4});
+                } catch(e){}
+            }
+
+            if(f.type === 'form') {
+                try {
+                    const field = form.getField(f.id);
+                    if(field instanceof PDFLib.PDFTextField) {
+                        if(f.forceMultiline) field.acroField.dict.set(PDFLib.PDFName.of('Ff'), PDFLib.PDFNumber.of(4096));
+                        field.setText(val);
+                    } else if(field instanceof PDFLib.PDFCheckBox) {
+                        (['si','1','yes','x'].includes(val.toLowerCase())) ? field.check() : field.uncheck();
+                    }
+                } catch(e){}
+            } else {
+                page.drawText(val, { x: f.manualX, y: f.manualY, size: 10, font: font, color: PDFLib.rgb(0,0,0) });
+            }
+        });
+        form.flatten();
+        return await doc.save();
+    }
+
+    els.btnPreview.addEventListener('click', async () => {
+        if(!state.excelData.length) return;
+        toggleLoading(true, "Generando Previa...");
+        try {
+            const b = await generatePdfBytes(state.excelData[0]);
+            window.open(URL.createObjectURL(new Blob([b], {type:'application/pdf'})), '_blank');
+        } catch(e){ alert(e.message); }
+        toggleLoading(false);
+    });
+
+    els.btnDownload.addEventListener('click', async () => {
+        if(!state.excelData.length) return;
+        toggleLoading(true, "Iniciando...");
+        const zip = new JSZip();
+        let errs = 0;
+        for(let i=0; i<state.excelData.length; i++) {
+            if(i%10===0) { document.getElementById('loadingSubtitle').innerText = `Procesando ${i+1} de ${state.excelData.length}`; await new Promise(r=>setTimeout(r,0)); }
+            try {
+                const row = state.excelData[i];
+                let name = `Fila_${i+1}`;
+                const k = state.excelHeaders.find(h=>/CLAVE|FOLIO/i.test(h));
+                if(k && row[k]) name = String(row[k]).replace(/[^a-z0-9]/gi,'_');
+                zip.file(`${name}.pdf`, await generatePdfBytes(row));
+            } catch(e){ errs++; zip.file(`Error_${i+1}.txt`, e.message); }
+        }
+        document.getElementById('loadingSubtitle').innerText = "Comprimiendo ZIP...";
+        await new Promise(r=>setTimeout(r,500));
+        saveAs(await zip.generateAsync({type:"blob"}), "Documentos_ISAI.zip");
+        toggleLoading(false);
+        if(errs>0) alert(`Completado con ${errs} errores.`); else alert("¡Proceso Terminado Exitosamente!");
+    });
+
+    function toggleLoading(s, t) { 
+        els.overlay.style.display = s?'flex':'none'; 
+        if(t) document.querySelector('#loadingOverlay .fw-bold').innerText = t; 
+    }
+    function updateStatus() { 
+        const pdf = state.pdfBytes ? 'PDF ✔' : '';
+        const exc = state.excelData.length ? `${state.excelData.length} Filas ✔` : '';
+        els.status.innerText = `${pdf} ${exc}`; 
+        checkReady(); 
+    }
+    function checkReady() { 
+        const r = state.pdfBytes && state.excelData.length;
+        els.btnPreview.disabled = !r; els.btnDownload.disabled = !r; els.btnAutoMap.disabled = !r;
+    }
+</script>
+</body>
+</html>
